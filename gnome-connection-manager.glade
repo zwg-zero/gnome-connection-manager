@@ -392,6 +392,7 @@
                     <property name="can_focus">False</property>
                     <items>
                       <item id="ssh" translatable="yes">ssh</item>
+                      <item id="sftp" translatable="yes">sftp</item>
                       <item id="telnet" translatable="yes">telnet</item>
                       <item id="local" translatable="yes">local</item>
                     </items>

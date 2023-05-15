@@ -88,6 +88,7 @@ app_fileversion = "1"
 BASE_PATH = os.path.dirname(os.path.abspath(sys.argv[0]))
 
 SSH_BIN = 'ssh'
+SFTP_BIN = 'sftp'
 TEL_BIN = 'telnet'
 SHELL   = os.environ["SHELL"]
 DEFAULT_TERM_TYPE = 'xterm-256color'
@@ -1304,12 +1305,14 @@ class Wmain(SimpleGladeApp):
             else:
                 cmd = SSH_COMMAND
                 password = host.password
-                if host.type == 'ssh':
+                if host.type == 'ssh' or host.type == 'sftp':
                     if len(host.user)==0:
                         host.user = get_username()
                     if host.password == '':
                         cmd = SSH_BIN
                         args = [ SSH_BIN, '-l', host.user, '-p', host.port]
+                    elif host.type == 'sftp':
+                        args = [SSH_COMMAND, host.type, '-P', host.port]
                     else:
                         args = [SSH_COMMAND, host.type, '-l', host.user, '-p', host.port]
                     if host.keep_alive!='0' and host.keep_alive!='':
@@ -1337,7 +1340,10 @@ class Wmain(SimpleGladeApp):
                         args.append(host.private_key)
                     if host.extra_params != None and host.extra_params != '':
                         args += shlex.split(host.extra_params)
-                    args.append(host.host)
+                    if host.type == 'sftp':
+                        args.append(host.user + "@" + host.host)
+                    else: 
+                        args.append(host.host)
                 else:
                     if host.user=='' or host.password=='':
                         password=''
