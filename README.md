@@ -1,5 +1,5 @@
 # Gnome Connection Manager or GCM
-
+Folked from https://github.com/kuthulux/gnome-connection-manager to add sftp support
 Gnome Connection Manager or GCM is a tabbed ssh connection manager for gtk+ environments.
 Starting with version 1.2.0 it **only** supports python3 and GTK 3 so it should run fine on any modern desktop environment.
 
