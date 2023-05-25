@@ -33,7 +33,7 @@ if { $connection == "telnet" } {
     set cmd "/usr/bin/telnet"
     set reg "assword:"
 } elseif { $connection == "sftp"} {
-    set timeout 10
+    set timeout 7
     set cmd "/usr/bin/sftp"
     set reg "assword:"
 } else {
@@ -50,7 +50,7 @@ expect {
           $reg { send "$pass\n"; exec kill -WINCH [ pid ]; interact; }
           -re "Are you sure you want to continue connecting (yes/no.*)?" { send "yes\n"; exp_continue; }
           "Host key verification failed." { puts $expect_out(buffer);  exit; }
-          timeout { send "\n"; interact; }
+          timeout { interact; }
        }
 
 log_user 1
