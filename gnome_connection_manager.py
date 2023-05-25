@@ -1308,10 +1308,12 @@ class Wmain(SimpleGladeApp):
                 if host.type == 'ssh' or host.type == 'sftp':
                     if len(host.user)==0:
                         host.user = get_username()
-                    if host.password == '':
+                    if host.password == '' and host.type != 'sftp':
                         cmd = SSH_BIN
                         args = [ SSH_BIN, '-l', host.user, '-p', host.port]
                     elif host.type == 'sftp':
+                        if host.password == '':
+                            password = 'fakepassword'
                         args = [SSH_COMMAND, host.type, '-P', host.port]
                     else:
                         args = [SSH_COMMAND, host.type, '-l', host.user, '-p', host.port]
