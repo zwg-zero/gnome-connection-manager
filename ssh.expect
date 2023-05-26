@@ -50,6 +50,7 @@ expect {
           $reg { send "$pass\n"; exec kill -WINCH [ pid ]; interact; }
           -re "Are you sure you want to continue connecting (yes/no.*)?" { send "yes\n"; exp_continue; }
           "Host key verification failed." { puts $expect_out(buffer);  exit; }
+	  -re "sftp>" { send "\n"; interact; }
           timeout { interact; }
        }
 
