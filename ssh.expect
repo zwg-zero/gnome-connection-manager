@@ -33,7 +33,7 @@ if { $connection == "telnet" } {
     set cmd "/usr/bin/telnet"
     set reg "assword:"
 } elseif { $connection == "sftp"} {
-    set timeout 10
+    set timeout 20
     set cmd "/usr/bin/sftp"
     set reg "assword:"
 } else {
