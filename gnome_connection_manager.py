@@ -81,7 +81,7 @@ import pyAES
 import urlregex
 
 app_name = "Gnome Connection Manager"
-app_version = "1.2.6"
+app_version = "2.0.0"
 app_web = "http://www.kuthulu.com/gcm"
 app_fileversion = "1"
 
@@ -110,7 +110,7 @@ assert( (USERHOME_DIR is not None) and (USERHOME_DIR != "") ), \
 assert os.path.isdir(USERHOME_DIR), \
     "FATAL: Could not locate home directory '%s' for the current user" % (USERHOME_DIR);
 
-CONFIG_DIR = USERHOME_DIR + "/.gcm"
+CONFIG_DIR = USERHOME_DIR + "/.gcmv2"
 CONFIG_FILE = CONFIG_DIR + "/gcm.conf"
 KEY_FILE = CONFIG_DIR + "/.gcm.key"
 
@@ -366,13 +366,14 @@ def vte_feed(terminal, data):
 
 def vte_run(terminal, command, arg=None):
     term_type = terminal.host.term if hasattr(terminal, 'host') and terminal.host.term else conf.TERM or os.getenv("TERM") or DEFAULT_TERM_TYPE
+    # print("term_type: %s" % term_type)
     envv = [ 'PATH=%s' % os.getenv("PATH"), 'TERM=%s' % term_type ]
-    args = []
-    args.append(command)
-    if arg:
-        args += arg
+    # print("the command: ", command)
+    args = command
+    # args =  [ x for x in command.split() if x != ' ']
     flag_spawn = GLib.SpawnFlags.DEFAULT if command == SHELL else GLib.SpawnFlags.FILE_AND_ARGV_ZERO
     if TERMINAL_V048:
+        # print("args:", args)
         terminal.spawn_async(Vte.PtyFlags.DEFAULT,
                            os.getenv("HOME"),
                            args,
@@ -452,15 +453,11 @@ class Wmain(SimpleGladeApp):
         if conf.HIDE_DONATE:
             self.get_widget("btnDonate").hide()
 
-        if conf.CHECK_UPDATES:
-            GLib.timeout_add(2000, lambda: self.check_updates())
-
         #load style.css
         screen = Gdk.Screen.get_default()
         provider = Gtk.CssProvider()
         provider.load_from_path(BASE_PATH + "/style.css")
         Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-
 
         #Por cada parametro de la linea de comandos buscar el host y agregar un tab
         for arg in sys.argv[1:]:
@@ -1290,7 +1287,7 @@ class Wmain(SimpleGladeApp):
             notebook.set_tab_detachable(scrollPane, True)
             self.wMain.set_focus(v)
             self.on_tab_focus(v)
-            self.set_terminal_logger(v, host.log)
+            # self.set_terminal_logger(v, host.log)
 
             GLib.timeout_add(200, lambda : self.wMain.set_focus(v))
 
@@ -1300,75 +1297,42 @@ class Wmain(SimpleGladeApp):
 
             v.host = host
 
-            if host.host == '' or host.host == None:
-                vte_run(v, SHELL)
-            else:
-                cmd = SSH_COMMAND
-                password = host.password
-                if host.type == 'ssh' or host.type == 'sftp':
-                    if len(host.user)==0:
-                        host.user = get_username()
-                    if host.password == '' and host.type != 'sftp':
-                        cmd = SSH_BIN
-                        args = [ SSH_BIN, '-l', host.user, '-p', host.port]
-                    elif host.type == 'sftp':
-                        if host.password == '':
-                            password = 'fakepassword'
-                        args = [SSH_COMMAND, host.type, '-P', host.port]
+            password = host.password
+            passphrase1 = host.passphrase1
+            passphrase2 = host.passphrase2
+            passNu = 0
+            totalPass = ''
+            for p in [passphrase1, passphrase2]:
+                if p is not None and p != '':
+                    passNu += 1
+                    if totalPass == '':
+                        totalPass = p
                     else:
-                        args = [SSH_COMMAND, host.type, '-l', host.user, '-p', host.port]
-                    if host.keep_alive!='0' and host.keep_alive!='':
-                        args.append('-o')
-                        args.append('ServerAliveInterval=%s' % (host.keep_alive))
-                    for t in host.tunnel:
-                        if t!="":
-                            if t.endswith(":*:*"):
-                                args.append("-D")
-                                args.append(t[:-4])
-                            else:
-                                args.append("-L")
-                                args.append(t)
-                    if host.x11:
-                        args.append("-X")
-                    if host.agent:
-                        args.append("-A")
-                    if host.compression:
-                        args.append("-C")
-                        if host.compressionLevel!='':
-                            args.append('-o')
-                            args.append('CompressionLevel=%s' % (host.compressionLevel))
-                    if host.private_key != None and host.private_key != '':
-                        args.append("-i")
-                        args.append(host.private_key)
-                    if host.extra_params != None and host.extra_params != '':
-                        args += shlex.split(host.extra_params)
-                    if host.type == 'sftp':
-                        args.append(host.user + "@" + host.host)
-                    else: 
-                        args.append(host.host)
+                        totalPass += " " + p
+            if password is not None and password != '':
+                if passNu == 0:
+                    totalPass = "%d %d %s" % (passNu, 1, password )
                 else:
-                    if host.user=='' or host.password=='':
-                        password=''
-                        cmd = TEL_BIN
-                        args = [TEL_BIN]
-                    else:
-                        args = [SSH_COMMAND, host.type, '-l', host.user]
-                    if host.extra_params != None and host.extra_params != '':
-                        args += shlex.split(host.extra_params)
-                    args += [host.host, host.port]
-                v.command = (cmd, args, password)
-                #v.fork_command(cmd, args)
-                vte_run(v, cmd, args)
-                while Gtk.events_pending():
-                    Gtk.main_iteration()
+                    totalPass = "%d %d %s" % (passNu, 1, totalPass + " " + password)
+            else:
+                totalPass = "%d %d %s" % (passNu, 0, totalPass)
 
-                #esperar 2 seg antes de enviar el pass para dar tiempo a que se levante expect y prevenir que se muestre el pass
-                if password!=None and password!='':
-                    GLib.timeout_add(2000, self.send_data, v, password)
+            args = []
+            if host.extra_params != None and host.extra_params != '':
+                args += shlex.split(host.extra_params)
+            v.command = (args,)
+            #v.fork_command(cmd, args)
+            vte_run(v, [SSH_COMMAND, SSH_COMMAND] + args)
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+
+            #esperar 2 seg antes de enviar el pass para dar tiempo a que se levante expect y prevenir que se muestre el pass
+            GLib.timeout_add(2000, self.send_data, v, totalPass)
 
             #esperar 3 seg antes de enviar comandos
             if host.commands!=None and host.commands!='':
-                basetime = 700 if len(host.host)==0 else 3000
+                # basetime = 700 if len(host.host)==0 else 3000
+                basetime = 3000
                 lines = []
                 for line in host.commands.splitlines():
                     if line.startswith("##D=") and line[4:].isdigit():
@@ -1427,7 +1391,7 @@ class Wmain(SimpleGladeApp):
         if pos:
             host = list(widget.get_model()[pos[0]])[1]
             if host:
-                text = "<span><b>%s</b>\n%s:%s@%s\n</span><span size='smaller'>%s</span>" % (host.name, host.type, host.user, host.host, host.description)
+                text = "<span><b>%s</b>\n</span><span size='smaller'>%s</span>" % (host.name, host.description)
                 tooltip.set_markup(text)
                 return True
         return False
@@ -2316,27 +2280,18 @@ class Wmain(SimpleGladeApp):
 class Host():
     def __init__(self, *args):
         try:
+        # host = Host(group, name, description, passphrase1, passphrase2, password, commands, fcolor, bcolor, extra_params, backspace_key, delete_key, term)
             self.i = 0
             self.group = self.get_arg(args, None)
             self.name =  self.get_arg(args, None)
             self.description =  self.get_arg(args, None)
-            self.host =  self.get_arg(args, None)
-            self.user =   self.get_arg(args, None)
+            self.passphrase1 = self.get_arg(args, None)
+            self.passphrase2 = self.get_arg(args, None)
             self.password = self.get_arg(args, None)
-            self.private_key = self.get_arg(args, None)
-            self.port = self.get_arg(args, 22)
-            self.tunnel = self.get_arg(args, '').split(",")
-            self.type = self.get_arg(args, 'ssh')
             self.commands = self.get_arg(args, None)
-            self.keep_alive = self.get_arg(args, 0)
             self.font_color = self.get_arg(args, '')
             self.back_color = self.get_arg(args, '')
-            self.x11 = self.get_arg(args, False)
-            self.agent = self.get_arg(args, False)
-            self.compression = self.get_arg(args,False)
-            self.compressionLevel = self.get_arg(args,'')
             self.extra_params = self.get_arg(args, '')
-            self.log = self.get_arg(args, False)
             self.backspace_key = self.get_arg(args, int(Vte.EraseBinding.AUTO))
             self.delete_key = self.get_arg(args, int(Vte.EraseBinding.AUTO))
             self.term = self.get_arg(args, '')
@@ -2356,7 +2311,8 @@ class Host():
         return ",".join(self.tunnel)
 
     def clone(self):
-        return Host(self.group, self.name, self.description, self.host, self.user, self.password, self.private_key, self.port, self.tunnel_as_string(), self.type, self.commands, self.keep_alive, self.font_color, self.back_color, self.x11, self.agent, self.compression, self.compressionLevel, self.extra_params, self.log, self.backspace_key, self.delete_key, self.term)
+        # host = Host(group, name, description, passphrase1, passphrase2, password, commands, fcolor, bcolor, extra_params, backspace_key, delete_key, term)
+        return Host(self.group, self.name, self.description, self.passphrase1, self.passphrase2, self.password, self.commands, self.font_color, self.back_color, self.extra_params, self.backspace_key, self.delete_key, self.term)
 
 class HostUtils:
     @staticmethod
@@ -2372,28 +2328,19 @@ class HostUtils:
             pwd = get_password()
         group = cp.get(section, "group")
         name = cp.get(section, "name")
-        host = cp.get(section, "host")
-        user = cp.get(section, "user")
+        passphrase1 = decrypt(pwd, cp.get(section, "passphrase1"))
+        passphrase2 = decrypt(pwd, cp.get(section, "passphrase2"))
         password = decrypt(pwd, cp.get(section, "pass"))
         description = HostUtils.get_val(cp, section, "description", "")
-        private_key = HostUtils.get_val(cp, section, "private_key", "")
-        port = HostUtils.get_val(cp, section, "port", "22")
-        tunnel = HostUtils.get_val(cp, section, "tunnel", "")
-        ctype = HostUtils.get_val(cp, section, "type", "ssh")
         commands = HostUtils.get_val(cp, section, "commands", "").replace('\x00', '\n').replace('\\n', '\n')
-        keepalive = HostUtils.get_val(cp, section, "keepalive", "")
         fcolor = HostUtils.get_val(cp, section, "font-color", "")
         bcolor = HostUtils.get_val(cp, section, "back-color", "")
-        x11 = HostUtils.get_val(cp, section, "x11", False)
-        agent = HostUtils.get_val(cp, section, "agent", False)
-        compression = HostUtils.get_val(cp, section, "compression", False)
-        compressionLevel = HostUtils.get_val(cp, section, "compression-level", "")
         extra_params = HostUtils.get_val(cp, section, "extra_params", "")
-        log = HostUtils.get_val(cp, section, "log", False)
         backspace_key = int(HostUtils.get_val(cp, section, "backspace-key", int(Vte.EraseBinding.AUTO)))
         delete_key = int(HostUtils.get_val(cp, section, "delete-key", int(Vte.EraseBinding.AUTO)))
         term = HostUtils.get_val(cp, section, "term", "")
-        h = Host(group, name, description, host, user, password, private_key, port, tunnel, ctype, commands, keepalive, fcolor, bcolor, x11, agent, compression, compressionLevel,  extra_params, log, backspace_key, delete_key, term)
+        # host = Host(group, name, description, passphrase1, passphrase2, password, commands, fcolor, bcolor, extra_params, backspace_key, delete_key, term)
+        h = Host(group, name, description, passphrase1, passphrase2, password, commands, fcolor, bcolor, extra_params, backspace_key, delete_key, term)
         return h
 
     @staticmethod
@@ -2403,23 +2350,13 @@ class HostUtils:
         cp.set(section, "group", host.group)
         cp.set(section, "name", host.name)
         cp.set(section, "description", host.description)
-        cp.set(section, "host", host.host)
-        cp.set(section, "user", host.user)
         cp.set(section, "pass", encrypt(pwd, host.password))
-        cp.set(section, "private_key", host.private_key)
-        cp.set(section, "port", host.port)
-        cp.set(section, "tunnel", host.tunnel_as_string())
-        cp.set(section, "type", host.type)
+        cp.set(section, "passphrase1", encrypt(pwd, host.passphrase1))
+        cp.set(section, "passphrase2", encrypt(pwd, host.passphrase2))
         cp.set(section, "commands", host.commands.replace('\n', '\\n'))
-        cp.set(section, "keepalive", host.keep_alive)
         cp.set(section, "font-color", host.font_color)
         cp.set(section, "back-color", host.back_color)
-        cp.set(section, "x11", host.x11)
-        cp.set(section, "agent", host.agent)
-        cp.set(section, "compression", host.compression)
-        cp.set(section, "compression-level", host.compressionLevel)
         cp.set(section, "extra_params", host.extra_params)
-        cp.set(section, "log", host.log)
         cp.set(section, "backspace-key", host.backspace_key)
         cp.set(section, "delete-key", host.delete_key)
         cp.set(section, "term", host.term)
@@ -2433,13 +2370,13 @@ class Whost(SimpleGladeApp):
         SimpleGladeApp.__init__(self, path, root, domain, parent=wMain.window)
 
         self.treeModel = Gtk.ListStore(GObject.TYPE_STRING, GObject.TYPE_STRING, GObject.TYPE_STRING, GObject.TYPE_STRING)
-        self.treeTunel.set_model(self.treeModel)
-        column = Gtk.TreeViewColumn(_("Local"), Gtk.CellRendererText(), text=0)
-        self.treeTunel.append_column( column )
-        column = Gtk.TreeViewColumn(_("Host"), Gtk.CellRendererText(), text=1)
-        self.treeTunel.append_column( column )
-        column = Gtk.TreeViewColumn(_("Remoto"), Gtk.CellRendererText(), text=2)
-        self.treeTunel.append_column( column )
+        # self.treeTunel.set_model(self.treeModel)
+        # column = Gtk.TreeViewColumn(_("Local"), Gtk.CellRendererText(), text=0)
+        # self.treeTunel.append_column( column )
+        # column = Gtk.TreeViewColumn(_("Host"), Gtk.CellRendererText(), text=1)
+        # self.treeTunel.append_column( column )
+        # column = Gtk.TreeViewColumn(_("Remoto"), Gtk.CellRendererText(), text=2)
+        # self.treeTunel.append_column( column )
 
 
     #-- Whost.new {
@@ -2450,43 +2387,43 @@ class Whost(SimpleGladeApp):
         #self.cmbGroup.set_model(Gtk.ListStore(str))
         self.txtName = self.get_widget("txtName")
         self.txtDescription = self.get_widget("txtDescription")
-        self.txtHost = self.get_widget("txtHost")
-        self.cmbType = self.get_widget("cmbType")
-        self.txtUser = self.get_widget("txtUser")
+        # self.txtHost = self.get_widget("txtHost")
+        # self.txtUser = self.get_widget("txtUser")
+        self.txtPassphrase1 = self.get_widget("txtPassphrase1")
+        self.txtPassphrase2 = self.get_widget("txtPassphrase2")
         self.txtPass = self.get_widget("txtPassword")
-        self.txtPrivateKey = self.get_widget("txtPrivateKey")
-        self.btnBrowse = self.get_widget("btnBrowse")
-        self.txtPort = self.get_widget("txtPort")
+        # self.txtPrivateKey = self.get_widget("txtPrivateKey")
+        # self.btnBrowse = self.get_widget("btnBrowse")
+        # self.txtPort = self.get_widget("txtPort")
         self.cmbGroup.remove_all()
         for group in groups:
             self.cmbGroup.append_text(group)
         self.isNew = True
 
-        self.chkDynamic = self.get_widget("chkDynamic")
-        self.txtLocalPort = self.get_widget("txtLocalPort")
-        self.txtRemoteHost = self.get_widget("txtRemoteHost")
-        self.txtRemotePort = self.get_widget("txtRemotePort")
-        self.treeTunel = self.get_widget("treeTunel")
+        # self.chkDynamic = self.get_widget("chkDynamic")
+        # self.txtLocalPort = self.get_widget("txtLocalPort")
+        # self.txtRemoteHost = self.get_widget("txtRemoteHost")
+        # self.txtRemotePort = self.get_widget("txtRemotePort")
+        # self.treeTunel = self.get_widget("treeTunel")
         self.txtComamnds = self.get_widget("txtCommands")
         self.chkComamnds = self.get_widget("chkCommands")
         buf = self.txtComamnds.get_buffer()
         buf.create_tag('DELAY1', style=Pango.Style.ITALIC, foreground='darkgray')
         buf.create_tag('DELAY2', style=Pango.Style.ITALIC, foreground='cadetblue')
         buf.connect("changed", self.update_texttags)
-        self.chkKeepAlive = self.get_widget("chkKeepAlive")
-        self.txtKeepAlive = self.get_widget("txtKeepAlive")
+        # self.chkKeepAlive = self.get_widget("chkKeepAlive")
+        # self.txtKeepAlive = self.get_widget("txtKeepAlive")
         self.btnFColor = self.get_widget("btnFColor")
         self.btnBColor = self.get_widget("btnBColor")
-        self.chkX11 = self.get_widget("chkX11")
-        self.chkAgent = self.get_widget("chkAgent")
-        self.chkCompression = self.get_widget("chkCompression")
-        self.txtCompressionLevel = self.get_widget("txtCompressionLevel")
+        # self.chkX11 = self.get_widget("chkX11")
+        # self.chkAgent = self.get_widget("chkAgent")
+        # self.chkCompression = self.get_widget("chkCompression")
+        # self.txtCompressionLevel = self.get_widget("txtCompressionLevel")
         self.txtExtraParams = self.get_widget("txtExtraParams")
-        self.chkLogging = self.get_widget("chkLogging")
+        # self.chkLogging = self.get_widget("chkLogging")
         self.cmbBackspace = self.get_widget("cmbBackspace")
         self.cmbDelete = self.get_widget("cmbDelete")
         self.txtTerm = self.get_widget("txtTerm")
-        self.cmbType.set_active(0)
         self.cmbBackspace.set_active(0)
         self.cmbDelete.set_active(0)
     #-- Whost.new }
@@ -2503,33 +2440,15 @@ class Whost(SimpleGladeApp):
         self.txtName.set_text(host.name)
         self.oldName = host.name
         self.txtDescription.set_text(host.description)
-        self.txtHost.set_text(host.host)
-        i =  self.cmbType.get_model().get_iter_first()
-        while i!=None:
-            if (host.type == self.cmbType.get_model()[i][0]):
-                self.cmbType.set_active_iter(i)
-                break
-            else:
-                i = self.cmbType.get_model().iter_next(i)
-        self.txtUser.set_text(host.user)
         self.txtPass.set_text(host.password)
-        self.txtPrivateKey.set_text(host.private_key)
-        self.txtPort.set_text(host.port)
-        for t in host.tunnel:
-            if t!="":
-                tun = t.split(":")
-                tun.append(t)
-                self.treeModel.append(  tun )
+        self.txtPassphrase1.set_text(host.passphrase1)
+        self.txtPassphrase2.set_text(host.passphrase2)
         self.txtCommands.set_sensitive(False)
         self.chkCommands.set_active(False)
         if host.commands!='' and host.commands!=None:
             self.txtCommands.get_buffer().set_text(host.commands)
             self.txtCommands.set_sensitive(True)
             self.chkCommands.set_active(True)
-        use_keep_alive = host.keep_alive!='' and host.keep_alive!='0' and host.keep_alive!=None
-        self.txtKeepAlive.set_sensitive(use_keep_alive)
-        self.chkKeepAlive.set_active(use_keep_alive)
-        self.txtKeepAlive.set_text(host.keep_alive)
         if host.font_color!='' and host.font_color!=None and host.back_color!='' and host.back_color!=None:
             self.get_widget("chkDefaultColors").set_active(False)
             self.btnFColor.set_sensitive(True)
@@ -2548,12 +2467,10 @@ class Whost(SimpleGladeApp):
 
         self.btnFColor.selected_color=fcolor
         self.btnBColor.selected_color=bcolor
-        self.chkX11.set_active(host.x11)
-        self.chkAgent.set_active(host.agent)
-        self.chkCompression.set_active(host.compression)
-        self.txtCompressionLevel.set_text(host.compressionLevel)
-        self.txtExtraParams.set_text(host.extra_params)
-        self.chkLogging.set_active(host.log)
+        self.txtExtraParams.set_sensitive(False)
+        if host.extra_params!='' and host.extra_params!=None:
+            self.txtExtraParams.get_buffer().set_text(host.extra_params)
+            self.txtExtraParams.set_sensitive(True)
         self.cmbBackspace.set_active(host.backspace_key)
         self.cmbDelete.set_active(host.delete_key)
         self.update_texttags()
@@ -2588,15 +2505,11 @@ class Whost(SimpleGladeApp):
         group = self.cmbGroup.get_active_text().strip()
         name = self.txtName.get_text().strip()
         description = self.txtDescription.get_text().strip()
-        host = self.txtHost.get_text().strip()
-        ctype = self.cmbType.get_active_text().strip()
-        user = self.txtUser.get_text().strip()
         password = self.txtPass.get_text().strip()
-        private_key = self.txtPrivateKey.get_text().strip()
-        port = self.txtPort.get_text().strip()
+        passphrase1 = self.txtPassphrase1.get_text().strip()
+        passphrase2 = self.txtPassphrase2.get_text().strip()
         buf = self.txtCommands.get_buffer()
         commands = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip() if self.chkCommands.get_active() else ""
-        keepalive = self.txtKeepAlive.get_text().strip()
         if self.get_widget("chkDefaultColors").get_active():
             fcolor=""
             bcolor=""
@@ -2604,36 +2517,15 @@ class Whost(SimpleGladeApp):
             fcolor = self.btnFColor.selected_color
             bcolor = self.btnBColor.selected_color
 
-        x11 = self.chkX11.get_active()
-        agent = self.chkAgent.get_active()
-        compression = self.chkCompression.get_active()
-        compressionLevel = self.txtCompressionLevel.get_text().strip()
-        extra_params = self.txtExtraParams.get_text()
-        log = self.chkLogging.get_active()
+        bufExtra = self.txtExtraParams.get_buffer()
+        extra_params = bufExtra.get_text(bufExtra.get_start_iter(), bufExtra.get_end_iter(), False)
+        # print("extraparams: ", extra_params)
         backspace_key = self.cmbBackspace.get_active()
         delete_key = self.cmbDelete.get_active()
 
-        if ctype == "":
-            ctype = "ssh"
-        tunnel=""
-
-        if ctype=="ssh":
-            for x in self.treeModel:
-                tunnel = '%s,%s' % (x[3], tunnel)
-            tunnel=tunnel[:-1]
-
-        #Validar datos
-        if group=="" or name=="" or (host=="" and ctype!='local'):
-            msgbox(_("Los campos grupo, nombre y host son obligatorios"))
-            return
-
-        if not (port and port.isdigit() and 1 <= int(port) <= 65535):
-            msgbox(_("Puerto invalido"))
-            return
-
         term = self.txtTerm.get_text()
 
-        host = Host(group, name, description, host, user, password, private_key, port, tunnel, ctype, commands, keepalive, fcolor, bcolor, x11, agent, compression, compressionLevel,  extra_params, log, backspace_key, delete_key, term)
+        host = Host(group, name, description, passphrase1, passphrase2, password, commands, fcolor, bcolor, extra_params, backspace_key, delete_key, term)
 
         try:
             #Guardar
@@ -2689,45 +2581,6 @@ class Whost(SimpleGladeApp):
         self.get_widget("wHost").destroy()
     #-- Whost.on_okbutton1_clicked }
 
-    #-- Whost.on_cmbType_changed {
-    def on_cmbType_changed(self, widget, *args):
-        is_local = widget.get_active_text()=="local"
-        self.txtUser.set_sensitive(not is_local)
-        self.txtPassword.set_sensitive(not is_local)
-        self.txtPort.set_sensitive(not is_local)
-        self.txtHost.set_sensitive(not is_local)
-        self.txtExtraParams.set_sensitive(not is_local)
-
-        if widget.get_active_text()=="ssh":
-            self.get_widget("table2").show()
-            self.txtKeepAlive.set_sensitive(True)
-            self.chkKeepAlive.set_sensitive(True)
-            self.chkX11.set_sensitive(True)
-            self.chkAgent.set_sensitive(True)
-            self.chkCompression.set_sensitive(True)
-            self.txtCompressionLevel.set_sensitive(self.chkCompression.get_active())
-            self.txtPrivateKey.set_sensitive(True)
-            self.btnBrowse.set_sensitive(True)
-            port = "22"
-        else:
-            self.get_widget("table2").hide()
-            self.txtKeepAlive.set_text('0')
-            self.txtKeepAlive.set_sensitive(False)
-            self.chkKeepAlive.set_sensitive(False)
-            self.chkX11.set_sensitive(False)
-            self.chkAgent.set_sensitive(False)
-            self.chkCompression.set_sensitive(False)
-            self.txtCompressionLevel.set_sensitive(False)
-            self.txtPrivateKey.set_sensitive(False)
-            self.btnBrowse.set_sensitive(False)
-            port = "23"
-            if is_local:
-                self.txtUser.set_text('')
-                self.txtPassword.set_text('')
-                self.txtPort.set_text('')
-                self.txtHost.set_text('')
-        self.txtPort.set_text(port)
-    #-- Whost.on_cmbType_changed }
 
     #-- Whost.on_chkKeepAlive_toggled {
     def on_chkKeepAlive_toggled(self, widget, *args):

@@ -1,0 +1,18 @@
+#!/usr/bin/expect
+
+
+
+eval spawn [ lrange $argv 0 [expr {$argc - 1}] ]
+
+expect {
+   -re "passphrase for key .*: " { send "$pass\n"; exp_continue; }
+   -re "passphrase for key .*: " { send "$pass\n"; exp_continue; }
+   -re "passphrase for key .*: " { send "$pass\n"; exp_continue; }
+   -re "passphrase for key .*: " { send "$pass\n"; exp_continue; }
+   -re "\\\$ " { interact; }
+	-re "sftp> " { interact; }
+}
+
+
+
+
